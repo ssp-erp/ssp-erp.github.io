@@ -224,6 +224,7 @@ tr:hover td{background:#f7fafc;}
     <button class="btn btn-secondary btn-sm" onclick="backupData()" style="width:100%;margin-bottom:3px;">💾 백업(JSON)</button>
     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restoreInput').click()" style="width:100%;margin-bottom:3px;">📂 복원</button>
     <button class="btn btn-secondary btn-sm" onclick="printPage()" style="width:100%;">🖨️ 인쇄</button>
+    <button class="btn btn-secondary btn-sm" onclick="resetToken()" style="width:100%;margin-top:3px;font-size:10px;">🔑 토큰 재설정</button>
     <input type="file" id="restoreInput" accept=".json" style="display:none" onchange="restoreData(event)">
   </div>
 </nav>
@@ -1681,11 +1682,19 @@ function hideMobileMenu(){
 // ============================================================
 // CLOUD SYNC (GitHub Gist)
 // ============================================================
-const GITHUB_TOKEN = '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';
+function getGithubToken(){
+  return localStorage.getItem('ssp5_ghtoken')||'';
+}
 const GIST_KEY = 'ssp5_gist_id';
 const GIST_FILENAME = 'ssp_erp_data.json';
 
 async function cloudSave(){
+  let token = getGithubToken();
+  if(!token){
+    token = prompt('GitHub 토큰을 입력하세요:\n(최초 1회만 입력하면 저장됩니다)');
+    if(!token){return;}
+    localStorage.setItem('ssp5_ghtoken', token);
+  }
   const btn = event.target;
   btn.textContent = '저장 중...';
   btn.disabled = true;
@@ -1731,6 +1740,12 @@ async function cloudSave(){
 }
 
 async function cloudLoad(){
+  let token = getGithubToken();
+  if(!token){
+    token = prompt('GitHub 토큰을 입력하세요:\n(최초 1회만 입력하면 저장됩니다)');
+    if(!token){return;}
+    localStorage.setItem('ssp5_ghtoken', token);
+  }
   const btn = event.target;
   btn.textContent = '불러오는 중...';
   btn.disabled = true;
@@ -1774,6 +1789,10 @@ async function cloudLoad(){
   }
 }
 
+function resetToken(){
+  const t=prompt('새 GitHub 토큰을 입력하세요:');
+  if(t){localStorage.setItem('ssp5_ghtoken',t);alert('토큰이 저장됐습니다.');}
+}
 function backupData(){
   const data={transactions,orders,costItems,rateTable,counterparties,assets,bankCards,vehicle,vehicleLogs,nextId,_ver:5};
   const a=document.createElement('a');
