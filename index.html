@@ -217,9 +217,12 @@ tr:hover td{background:#f7fafc;}
     <div class="nav-item" onclick="navigate('vehiclelog')"><span class="icon">🗺️</span><span>운행기록</span></div>
   </div>
   <div class="sidebar-footer">
-    <div style="font-size:11px;color:#8899aa;margin-bottom:6px;">데이터 관리</div>
-    <button class="btn btn-secondary btn-sm" onclick="backupData()" style="width:100%;margin-bottom:4px;">💾 백업</button>
-    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restoreInput').click()" style="width:100%;margin-bottom:4px;">📂 복원</button>
+    <div style="font-size:11px;color:#8899aa;margin-bottom:5px;">클라우드 동기화</div>
+    <button class="btn btn-sm" onclick="cloudSave()" style="width:100%;margin-bottom:3px;background:#2ea44f;color:#fff;">☁️ 클라우드 저장</button>
+    <button class="btn btn-sm" onclick="cloudLoad()" style="width:100%;margin-bottom:6px;background:#0969da;color:#fff;">🔄 클라우드 불러오기</button>
+    <div style="font-size:11px;color:#8899aa;margin-bottom:5px;">로컬 백업</div>
+    <button class="btn btn-secondary btn-sm" onclick="backupData()" style="width:100%;margin-bottom:3px;">💾 백업(JSON)</button>
+    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('restoreInput').click()" style="width:100%;margin-bottom:3px;">📂 복원</button>
     <button class="btn btn-secondary btn-sm" onclick="printPage()" style="width:100%;">🖨️ 인쇄</button>
     <input type="file" id="restoreInput" accept=".json" style="display:none" onchange="restoreData(event)">
   </div>
