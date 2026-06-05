@@ -1706,19 +1706,19 @@ async function cloudSave(){
     if(gistId){
       res = await fetch(`https://api.github.com/gists/${gistId}`, {
         method:'PATCH',
-        headers:{'Authorization':'token '+GITHUB_TOKEN,'Content-Type':'application/json'},
+        headers:{'Authorization':'token '+getGithubToken(),'Content-Type':'application/json'},
         body: JSON.stringify({files:{}})
       });
       // update
       res = await fetch(`https://api.github.com/gists/${gistId}`, {
         method:'PATCH',
-        headers:{'Authorization':'token '+GITHUB_TOKEN,'Content-Type':'application/json'},
+        headers:{'Authorization':'token '+getGithubToken(),'Content-Type':'application/json'},
         body: JSON.stringify({files:{[GIST_FILENAME]:{content:body}}})
       });
     } else {
       res = await fetch('https://api.github.com/gists', {
         method:'POST',
-        headers:{'Authorization':'token '+GITHUB_TOKEN,'Content-Type':'application/json'},
+        headers:{'Authorization':'token '+getGithubToken(),'Content-Type':'application/json'},
         body: JSON.stringify({
           description:'SSP ERP Data',
           public:false,
@@ -1755,7 +1755,7 @@ async function cloudLoad(){
     if(!gistId){
       // gistId 없으면 목록에서 SSP ERP Data gist 찾기
       const res = await fetch('https://api.github.com/gists', {
-        headers:{'Authorization':'token '+GITHUB_TOKEN}
+        headers:{'Authorization':'token '+getGithubToken()}
       });
       const gists = await res.json();
       const found = gists.find(g=>g.description==='SSP ERP Data'&&g.files[GIST_FILENAME]);
@@ -1764,7 +1764,7 @@ async function cloudLoad(){
       localStorage.setItem(GIST_KEY, gistId);
     }
     const res = await fetch(`https://api.github.com/gists/${gistId}`, {
-      headers:{'Authorization':'token '+GITHUB_TOKEN}
+      headers:{'Authorization':'token '+getGithubToken()}
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
     const gist = await res.json();
