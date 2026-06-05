@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>성신프로세스 ERP v4.0</title>
+<title>성신프로세스 ERP v5.1</title>
 <style>
 :root{
   --bg:#f0f2f5;--surface:#fff;--surface2:#f8f9fa;--border:#e2e8f0;
@@ -186,7 +186,7 @@ tr:hover td{background:#f7fafc;}
 <nav id="sidebar">
   <div class="sidebar-logo">
     <div class="company">성신프로세스</div>
-    <div class="sub">SSP ERP v5.0</div>
+    <div class="sub">SSP ERP v5.1</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">메인</div>
@@ -1704,12 +1704,6 @@ async function cloudSave(){
     const gistId = localStorage.getItem(GIST_KEY);
     let res;
     if(gistId){
-      res = await fetch(`https://api.github.com/gists/${gistId}`, {
-        method:'PATCH',
-        headers:{'Authorization':'token '+getGithubToken(),'Content-Type':'application/json'},
-        body: JSON.stringify({files:{}})
-      });
-      // update
       res = await fetch(`https://api.github.com/gists/${gistId}`, {
         method:'PATCH',
         headers:{'Authorization':'token '+getGithubToken(),'Content-Type':'application/json'},
