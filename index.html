@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>성신프로세스 ERP v5.3</title>
+<title>성신프로세스 ERP v5.5</title>
 <style>
 :root{
   --bg:#f0f2f5;--surface:#fff;--surface2:#f8f9fa;--border:#e2e8f0;
@@ -187,7 +187,7 @@ tr:hover td{background:#f7fafc;}
 <nav id="sidebar">
   <div class="sidebar-logo">
     <div class="company">성신프로세스</div>
-    <div class="sub">SSP ERP v5.3</div>
+    <div class="sub">SSP ERP v5.5</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">메인</div>
@@ -402,20 +402,36 @@ tr:hover td{background:#f7fafc;}
     </div>
 
     <div class="form-section-title">💰 금액/환율</div>
-    <div class="form-group"><label>매입단가(외화)</label><input type="number" id="o_buyprice" step="0.01" oninput="calcOrderPreview()"></div>
+    <div class="form-group"><label>매입총액(외화) *</label><input type="number" id="o_totalFx" step="0.01" oninput="calcOrderPreview()" placeholder="송장 총액 입력"></div>
     <div class="form-group"><label>매입통화</label>
       <select id="o_currency" onchange="calcOrderPreview()">
         <option value="EUR">EUR</option><option value="USD">USD</option>
         <option value="AUD">AUD</option><option value="KRW">KRW</option><option value="CNY">CNY</option>
       </select>
     </div>
-    <div class="form-group"><label>적용환율</label><input type="number" id="o_fxrate" step="0.01" oninput="calcOrderPreview()"></div>
+    <div class="form-group"><label>단가(외화/단위) 자동</label><input type="text" id="o_unitFx" readonly style="color:#6b7280"></div>
+    <div class="form-group"><label>안내환율 (고객청구용)</label><input type="number" id="o_quotedRate" step="0.01" oninput="calcOrderPreview()" placeholder="예: 1557.48"></div>
+    <div class="form-group"><label>환전환율 (실제 환전)</label><input type="number" id="o_actualRate" step="0.01" oninput="calcOrderPreview()" placeholder="예: 1537.60"></div>
     <div class="form-group"><label>매입총액(원) 자동</label><input type="number" id="o_costKrw" readonly></div>
+    <div class="form-group"><label>환차익(원) 자동</label><input type="text" id="o_fxGain" readonly style="font-weight:700"></div>
     <div class="form-group"><label>연동비용합계(원) 자동</label><input type="number" id="o_linkedcost" readonly style="color:var(--primary)"></div>
     <div class="form-group"><label>총원가(원) 자동</label><input type="number" id="o_totalcost" readonly></div>
     <div class="form-group"><label>매출금액(원)</label><input type="number" id="o_salesKrw" oninput="calcOrderPreview()"></div>
     <div class="form-group"><label>마진(원) 자동</label><input type="number" id="o_margin" readonly></div>
     <div class="form-group"><label>마진율(%) 자동</label><input type="text" id="o_marginPct" readonly></div>
+
+    <div class="form-section-title">💵 결제 흐름 (선수금 · 송금 · 잔금)</div>
+    <div class="form-group"><label>선수금 일자</label><input type="date" id="o_prepayDate"></div>
+    <div class="form-group"><label>선수금 받은 금액(원)</label><input type="number" id="o_prepayKrw" placeholder="예: 26,191,460"></div>
+    <div class="form-group"><label>송금 일자</label><input type="date" id="o_remitDate"></div>
+    <div class="form-group"><label>송금 외화액</label><input type="number" id="o_remitFx" step="0.01" placeholder="예: 16817.43"></div>
+    <div class="form-group"><label>송금 적용환율</label><input type="number" id="o_remitRate" step="0.01" placeholder="비우면 환전환율 사용"></div>
+    <div class="form-group"><label>송금 수수료(원)</label><input type="number" id="o_remitFeeKrw" placeholder="은행+중계은행 수수료 합계"></div>
+    <div class="form-group"><label>잔금 일자</label><input type="date" id="o_balanceDate"></div>
+    <div class="form-group"><label>잔금 받은 금액(원)</label><input type="number" id="o_balanceKrw"></div>
+    <div class="form-group"><label>거래장부 자동연동</label>
+      <select id="o_autoTx"><option value="Y">예 (저장 시 자동생성/갱신)</option><option value="N">아니오 (수동 입력)</option></select>
+    </div>
 
     <div class="form-section-title">🚢 물류/운송 정보</div>
     <div class="form-group"><label>화물준비일(Cargo Ready)</label><input type="date" id="o_cargoready"></div>
@@ -789,14 +805,20 @@ function getLinkedSales(orderId){
 
 function calcOrderPreview(){
   const qty=parseFloat(document.getElementById('o_qty').value)||1;
-  const buy=parseFloat(document.getElementById('o_buyprice').value)||0;
-  const rate=parseFloat(document.getElementById('o_fxrate').value)||1;
+  const totalFx=parseFloat(document.getElementById('o_totalFx').value)||0;
+  const quotedRate=parseFloat(document.getElementById('o_quotedRate').value)||0;
+  const actualRate=parseFloat(document.getElementById('o_actualRate').value)||quotedRate||0;
   const sales=parseFloat(document.getElementById('o_salesKrw').value)||0;
-  const costKrw=Math.round(qty*buy*rate);
+  const unitFx=qty>0&&totalFx?(totalFx/qty):0;
+  const costKrw=Math.round(totalFx*actualRate);
+  const fxGain=quotedRate&&actualRate&&totalFx?Math.round((quotedRate-actualRate)*totalFx):0;
   const linkedCost=editingOrderId?getLinkedCost(editingOrderId):0;
   const total=costKrw+linkedCost;
-  const margin=sales-total;
+  const margin=sales-total+fxGain; // 환차익은 마진에 더함
+  document.getElementById('o_unitFx').value=unitFx?unitFx.toFixed(4):'';
   document.getElementById('o_costKrw').value=costKrw;
+  document.getElementById('o_fxGain').value=fxGain?(fxGain>0?'+':'')+fxGain.toLocaleString()+'원':'';
+  document.getElementById('o_fxGain').style.color=fxGain>0?'#16a34a':(fxGain<0?'#dc2626':'#6b7280');
   document.getElementById('o_linkedcost').value=linkedCost;
   document.getElementById('o_totalcost').value=total;
   document.getElementById('o_margin').value=margin;
@@ -1060,9 +1082,12 @@ function renderOrders(fs='',fst=''){
   od.forEach(o=>{
     const lc=getLinkedCost(o.id);
     const ls=getLinkedSales(o.id);
-    const costKrw=Math.round((o.qty||1)*(o.buyprice||0)*(o.fxrate||1));
+    const totalFx=o.totalFx||((o.qty||1)*(o.buyprice||0));
+    const aRate=o.actualRate||o.fxrate||0;
+    const costKrw=Math.round(totalFx*aRate);
     const total=costKrw+lc;
-    const margin=(ls||o.salesKrw||0)-total;
+    const fxGain=o.fxGain||0;
+    const margin=(ls||o.salesKrw||0)-total+fxGain;
     tot.cost+=total;tot.sales+=(ls||o.salesKrw||0);tot.margin+=margin;
   });
   document.getElementById('content').innerHTML=`
@@ -1090,11 +1115,16 @@ function renderOrders(fs='',fst=''){
   ${od.length?od.map(o=>{
     const lc=getLinkedCost(o.id);
     const ls=getLinkedSales(o.id);
-    const costKrw=Math.round((o.qty||1)*(o.buyprice||0)*(o.fxrate||1));
+    const totalFx=o.totalFx||((o.qty||1)*(o.buyprice||0));
+    const aRate=o.actualRate||o.fxrate||0;
+    const qRate=o.quotedRate||o.fxrate||0;
+    const costKrw=Math.round(totalFx*aRate);
     const total=costKrw+lc;
     const salesVal=ls||o.salesKrw||0;
-    const margin=salesVal-total;
+    const fxGain=o.fxGain||0;
+    const margin=salesVal-total+fxGain;
     const linkedTxs=transactions.filter(t=>t.orderId===o.id);
+    const ps=getOrderPayStatus(o);
     return `
     <div class="card" style="margin-bottom:0">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -1102,6 +1132,11 @@ function renderOrders(fs='',fst=''){
           <span class="badge badge-${o.status}" style="margin-right:8px">${o.status}</span>
           <strong style="font-size:14px">${o.item}</strong>
           <span style="font-size:11px;color:var(--text3);margin-left:8px">#${o.id} · ${o.date}</span>
+          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;font-size:11px">
+            <span style="background:#eef2ff;color:#4338ca;padding:2px 8px;border-radius:10px">💰선수 ${ps.prep}</span>
+            <span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px">💸송금 ${ps.remit}</span>
+            <span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:10px">💵잔금 ${ps.bal}</span>
+          </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap" class="no-print">
           <button class="btn btn-purple btn-sm" onclick="openSettleModal(${o.id})">🔗 비용/송금 입력</button>
@@ -1113,7 +1148,7 @@ function renderOrders(fs='',fst=''){
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px">
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">공급자</div><div style="font-size:12px">${o.supplier_name||'-'}</div></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">국내거래처</div><div style="font-size:12px">${o.buyer_name||'-'}</div></div>
-        <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">매입(외화)</div><div><span class="fx-pill">${fmt(o.buyprice)} ${o.currency}@${o.fxrate}</span></div></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">매입(외화)</div><div><span class="fx-pill">${fmt(totalFx)} ${o.currency||''}${qRate&&aRate&&qRate!==aRate?` @ 안내${qRate}/환전${aRate}`:` @${aRate}`}</span></div></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">결제조건</div><div style="font-size:12px">${o.payterms||'-'}</div></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">POL → POD</div><div style="font-size:12px">${o.pol||'?'} → ${o.pod||'?'}</div></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">ETA</div><div style="font-size:12px;font-weight:600">${o.eta||'-'}</div></div>
@@ -1124,10 +1159,11 @@ function renderOrders(fs='',fst=''){
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">운송사</div><div style="font-size:12px">${o.transporter||'-'}</div></div>
         <div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">메모</div><div style="font-size:11px;color:var(--text3)">${o.note||''}</div></div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:${linkedTxs.length?'12px':'0'}">
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:${linkedTxs.length?'12px':'0'}">
         <div><div style="font-size:10px;color:var(--text3)">매입원가</div><div style="font-weight:600">${fmt(costKrw)}원</div></div>
         <div><div style="font-size:10px;color:var(--primary)">연동비용합계</div><div style="font-weight:600;color:var(--primary)">${fmt(lc)}원</div></div>
         <div><div style="font-size:10px;color:var(--text3)">총원가</div><div style="font-weight:600">${fmt(total)}원</div></div>
+        <div><div style="font-size:10px;color:${fxGain>0?'#16a34a':(fxGain<0?'#dc2626':'var(--text3)')}">환차익</div><div style="font-weight:600;color:${fxGain>0?'#16a34a':(fxGain<0?'#dc2626':'inherit')}">${fxGain?(fxGain>0?'+':'')+fmt(fxGain)+'원':'-'}</div></div>
         <div><div style="font-size:10px;color:var(--text3)">매출</div><div style="font-weight:600">${fmt(salesVal)}원</div></div>
         <div><div style="font-size:10px;color:var(--text3)">마진</div><div class="${margin>=0?'positive':'negative'}">${fmt(margin)}원 (${pct(margin,salesVal)})</div></div>
       </div>
@@ -1304,20 +1340,27 @@ function openOrderModal(o=null){
   document.getElementById('orderModalTitle').textContent=o?'오더 수정':'수입오더 등록';
   document.getElementById('o_supplier').innerHTML=cpOptions();
   document.getElementById('o_buyer').innerHTML=cpOptions();
-  const flds={o_date:'date',o_item:'item',o_qty:'qty',o_buyprice:'buyprice',o_fxrate:'fxrate',o_salesKrw:'salesKrw',o_status:'status',o_note:'note',o_payterms:'payterms',o_cargoready:'cargoready',o_etd:'etd',o_eta:'eta',o_pol:'pol',o_pod:'pod',o_blno:'blno',o_carrier:'carrier',o_bookingno:'bookingno',o_forwarder:'forwarder',o_transporter:'transporter',o_customs:'customs'};
+  const flds={o_date:'date',o_item:'item',o_qty:'qty',o_salesKrw:'salesKrw',o_status:'status',o_note:'note',o_payterms:'payterms',o_cargoready:'cargoready',o_etd:'etd',o_eta:'eta',o_pol:'pol',o_pod:'pod',o_blno:'blno',o_carrier:'carrier',o_bookingno:'bookingno',o_forwarder:'forwarder',o_transporter:'transporter',o_customs:'customs',o_prepayDate:'prepayDate',o_prepayKrw:'prepayKrw',o_remitDate:'remitDate',o_remitFx:'remitFx',o_remitRate:'remitRate',o_remitFeeKrw:'remitFeeKrw',o_balanceDate:'balanceDate',o_balanceKrw:'balanceKrw'};
   if(o){
     Object.entries(flds).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=o[key]||'';});
+    // 신규 필드 + 구버전 호환 (totalFx 없으면 buyprice를 총액으로 처리; quotedRate/actualRate 없으면 fxrate 사용)
+    document.getElementById('o_totalFx').value=(o.totalFx!=null&&o.totalFx!=='')?o.totalFx:(o.buyprice||'');
+    document.getElementById('o_quotedRate').value=(o.quotedRate!=null&&o.quotedRate!=='')?o.quotedRate:(o.fxrate||'');
+    document.getElementById('o_actualRate').value=(o.actualRate!=null&&o.actualRate!=='')?o.actualRate:(o.fxrate||'');
     document.getElementById('o_currency').value=o.currency||'EUR';
     document.getElementById('o_unit').value=o.unit||'컨테이너';
     document.getElementById('o_supplier').value=o.supplier_name||'';
     document.getElementById('o_buyer').value=o.buyer_name||'';
+    document.getElementById('o_autoTx').value=o.autoTx||'Y';
     calcOrderPreview();
   }else{
     document.getElementById('o_date').value=todayStr();
-    Object.keys(flds).filter(k=>k!=='o_date'&&k!=='o_status').forEach(id=>document.getElementById(id).value='');
+    Object.keys(flds).filter(k=>k!=='o_date'&&k!=='o_status').forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    ['o_totalFx','o_quotedRate','o_actualRate','o_unitFx'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('o_status').value='발주';
     document.getElementById('o_currency').value='EUR';
-    ['o_costKrw','o_linkedcost','o_totalcost','o_margin','o_marginPct'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('o_autoTx').value='Y';
+    ['o_costKrw','o_fxGain','o_linkedcost','o_totalcost','o_margin','o_marginPct'].forEach(id=>document.getElementById(id).value='');
   }
   document.getElementById('orderModal').classList.add('open');
 }
@@ -1326,10 +1369,12 @@ function saveOrder(){
   const item=document.getElementById('o_item').value;
   if(!item){alert('품목 필수');return;}
   const qty=parseFloat(document.getElementById('o_qty').value)||1;
-  const buy=parseFloat(document.getElementById('o_buyprice').value)||0;
-  const rate=parseFloat(document.getElementById('o_fxrate').value)||0;
+  const totalFx=parseFloat(document.getElementById('o_totalFx').value)||0;
+  const quotedRate=parseFloat(document.getElementById('o_quotedRate').value)||0;
+  const actualRate=parseFloat(document.getElementById('o_actualRate').value)||quotedRate||0;
   const salesKrw=parseFloat(document.getElementById('o_salesKrw').value)||0;
-  const costKrw=Math.round(qty*buy*rate);
+  const costKrw=Math.round(totalFx*actualRate);
+  const fxGain=quotedRate&&actualRate&&totalFx?Math.round((quotedRate-actualRate)*totalFx):0;
   const lc=editingOrderId?getLinkedCost(editingOrderId):0;
   const total=costKrw+lc;
   const o={
@@ -1338,7 +1383,10 @@ function saveOrder(){
     supplier_name:document.getElementById('o_supplier').value,
     buyer_name:document.getElementById('o_buyer').value,
     qty,unit:document.getElementById('o_unit').value,
-    buyprice:buy,currency:document.getElementById('o_currency').value,fxrate:rate,
+    totalFx,quotedRate,actualRate,
+    buyprice:qty>0?(totalFx/qty):0, // 구버전 호환용 단가 자동저장
+    currency:document.getElementById('o_currency').value,
+    fxrate:actualRate, // 구버전 호환용
     localcost:lc,importcost:0,salesKrw,
     status:document.getElementById('o_status').value,
     note:document.getElementById('o_note').value,
@@ -1351,13 +1399,65 @@ function saveOrder(){
     forwarder:document.getElementById('o_forwarder').value,
     transporter:document.getElementById('o_transporter').value,
     customs:document.getElementById('o_customs').value,
-    costKrw,totalcost:total,margin:salesKrw-total,
+    // 결제흐름
+    prepayDate:document.getElementById('o_prepayDate').value,
+    prepayKrw:parseFloat(document.getElementById('o_prepayKrw').value)||0,
+    remitDate:document.getElementById('o_remitDate').value,
+    remitFx:parseFloat(document.getElementById('o_remitFx').value)||0,
+    remitRate:parseFloat(document.getElementById('o_remitRate').value)||actualRate||0,
+    remitFeeKrw:parseFloat(document.getElementById('o_remitFeeKrw').value)||0,
+    balanceDate:document.getElementById('o_balanceDate').value,
+    balanceKrw:parseFloat(document.getElementById('o_balanceKrw').value)||0,
+    autoTx:document.getElementById('o_autoTx').value,
+    fxGain,costKrw,totalcost:total,margin:salesKrw-total+fxGain,
   };
   if(editingOrderId){const i=orders.findIndex(x=>x.id===editingOrderId);if(i>=0)orders[i]=o;}
   else orders.push(o);
   saveLS('orders',orders);saveLS('nextId',nextId);
+  applyAutoOrderTransactions(o);
   document.getElementById('orderModal').classList.remove('open');
   renderOrders();
+}
+
+// ============================================================
+// 오더 결제흐름 → 거래장부 자동연동 (idempotent, 마커 기반)
+// ============================================================
+function applyAutoOrderTransactions(o){
+  if(o.autoTx!=='Y')return;
+  const findIdx=mk=>transactions.findIndex(t=>t.orderId===o.id&&(t.note||'').includes(mk));
+  const upsert=(mk,base)=>{const i=findIdx(mk);if(i>=0){const id=transactions[i].id;transactions[i]={...transactions[i],...base,id,orderId:o.id};}else{transactions.push({id:nextId++,orderId:o.id,...base});}};
+  const remove=mk=>{const i=findIdx(mk);if(i>=0)transactions.splice(i,1);};
+  // 선수금
+  if(o.prepayKrw>0&&o.prepayDate){
+    upsert('[AUTO:PREPAY]',{date:o.prepayDate,type:'매출',account:'선수금',counterparty:o.buyer_name||'',project:o.item||'',currency:'KRW',fxamt:0,fxrate:0,amount:o.prepayKrw,vattype:'면세',vat:0,payment:'계좌이체',proof:'무증빙',collected:'Y',bizbr:100,note:`[AUTO:PREPAY] 수입오더 #${o.id} 선수금 (안내율 ${o.quotedRate||''})`});
+  }else remove('[AUTO:PREPAY]');
+  // 송금
+  if(o.remitFx>0&&o.remitDate&&o.remitRate){
+    const krw=Math.round(o.remitFx*o.remitRate);
+    upsert('[AUTO:REMIT]',{date:o.remitDate,type:'해외송금',account:'외환매입',counterparty:o.supplier_name||'',project:o.item||'',currency:o.currency||'USD',fxamt:o.remitFx,fxrate:o.remitRate,amount:krw,vattype:'해외불공제',vat:0,payment:'해외송금(T/T)',proof:'해외영수증',collected:'Y',bizbr:100,note:`[AUTO:REMIT] 수입오더 #${o.id} 송금 (${o.remitFx} ${o.currency||'USD'}@${o.remitRate})`});
+  }else remove('[AUTO:REMIT]');
+  // 송금 수수료
+  if(o.remitFeeKrw>0&&(o.remitDate||o.date)){
+    upsert('[AUTO:REMITFEE]',{date:o.remitDate||o.date,type:'경비',account:'지급수수료',counterparty:'',project:o.item||'',currency:'KRW',fxamt:0,fxrate:0,amount:o.remitFeeKrw,vattype:'면세',vat:0,payment:'계좌이체',proof:'무증빙',collected:'Y',bizbr:100,note:`[AUTO:REMITFEE] 수입오더 #${o.id} 송금수수료(은행/중계)`});
+  }else remove('[AUTO:REMITFEE]');
+  // 환차익/차손
+  if(o.fxGain&&o.fxGain!==0){
+    const isGain=o.fxGain>0;
+    upsert('[AUTO:FXGAIN]',{date:o.remitDate||o.prepayDate||o.date,type:'기타',account:isGain?'외환차익':'외환차손',counterparty:'',project:o.item||'',currency:'KRW',fxamt:0,fxrate:0,amount:Math.abs(o.fxGain),vattype:'면세',vat:0,payment:'',proof:'무증빙',collected:'Y',bizbr:100,note:`[AUTO:FXGAIN] 수입오더 #${o.id} 환율차${isGain?'익':'손'} (${o.quotedRate}→${o.actualRate}) × ${o.totalFx}`});
+  }else remove('[AUTO:FXGAIN]');
+  // 잔금
+  if(o.balanceKrw>0&&o.balanceDate){
+    upsert('[AUTO:BALANCE]',{date:o.balanceDate,type:'매출',account:'상품',counterparty:o.buyer_name||'',project:o.item||'',currency:'KRW',fxamt:0,fxrate:0,amount:o.balanceKrw,vattype:'면세',vat:0,payment:'계좌이체',proof:'무증빙',collected:'Y',bizbr:100,note:`[AUTO:BALANCE] 수입오더 #${o.id} 잔금`});
+  }else remove('[AUTO:BALANCE]');
+  saveLS('transactions',transactions);saveLS('nextId',nextId);
+}
+
+// 결제상태 자동 파생 (renderOrders 카드 배지용)
+function getOrderPayStatus(o){
+  const prep=o.prepayKrw>0?'✅':'⏳';
+  const remit=(o.remitFx>0&&o.remitRate>0)?'✅':'⏳';
+  const bal=o.balanceKrw>0?'✅':(o.payterms&&/잔금|60%|balance/i.test(o.payterms)?'⏳':'—');
+  return {prep,remit,bal};
 }
 
 const ORDER_STATUS=['견적','발주','생산중','화물준비중','선적완료','운송중','입항완료','통관중','내륙운송중','정산완료'];
