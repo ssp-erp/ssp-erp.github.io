@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>성신프로세스 ERP v5.6</title>
+<title>성신프로세스 ERP v5.7</title>
 <style>
 :root{
   --bg:#f0f2f5;--surface:#fff;--surface2:#f8f9fa;--border:#e2e8f0;
@@ -187,7 +187,7 @@ tr:hover td{background:#f7fafc;}
 <nav id="sidebar">
   <div class="sidebar-logo">
     <div class="company">성신프로세스</div>
-    <div class="sub">SSP ERP v5.6</div>
+    <div class="sub">SSP ERP v5.7</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">메인</div>
@@ -553,6 +553,7 @@ tr:hover td{background:#f7fafc;}
       </select>
     </div>
     <div class="form-group"><label>부가세</label><input type="number" id="s_vat" readonly style="background:#f8f9fa"></div>
+    <div class="form-group" style="grid-column:1/-1;background:#fef3c7;padding:8px;border-radius:6px"><label style="color:#92400e;font-weight:600">💰 고객 청구액(원) — 입력 시 매출 거래도 자동생성 (마진은 차액)</label><input type="number" id="s_billKrw" placeholder="예: 110000 (실비+마진). 비우면 매출 안 생성"></div>
     <div class="form-group"><label>결제수단</label>
       <select id="s_payment">
         <option value="해외송금(T/T)">해외송금(T/T)</option>
@@ -1278,6 +1279,29 @@ function saveSettle(){
     note:document.getElementById('s_note').value||type,
   };
   transactions.push(tx);
+  // 패스스루: 고객청구액 입력 시 매출 거래 동시 생성
+  const billKrw=parseFloat(document.getElementById('s_billKrw').value)||0;
+  if(billKrw>0&&typeMap[type]!=='매출'){
+    const billTx={
+      id:nextId++,
+      date:document.getElementById('s_date').value,
+      type:'매출',
+      account:'재청구('+type+')',
+      counterparty:o?o.buyer_name||'':'',
+      orderId:settlingOrderId,
+      project:o?o.item.substring(0,30):'',
+      currency:'KRW',fxamt:0,fxrate:0,
+      amount:billKrw,
+      vattype:'일반10%',
+      vat:Math.round(billKrw*0.1),
+      payment:'계좌이체',
+      proof:'세금계산서',
+      collected:'N',
+      bizbr:100,
+      note:`[패스스루] ${type} 재청구 (실비 ${amount.toLocaleString()}원 → 청구 ${billKrw.toLocaleString()}원)`,
+    };
+    transactions.push(billTx);
+  }
   saveLS('transactions',transactions);saveLS('nextId',nextId);
   document.getElementById('settleModal').classList.remove('open');
   renderOrders();
