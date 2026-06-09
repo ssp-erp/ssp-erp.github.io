@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>성신프로세스 ERP v5.5</title>
+<title>성신프로세스 ERP v5.6</title>
 <style>
 :root{
   --bg:#f0f2f5;--surface:#fff;--surface2:#f8f9fa;--border:#e2e8f0;
@@ -187,7 +187,7 @@ tr:hover td{background:#f7fafc;}
 <nav id="sidebar">
   <div class="sidebar-logo">
     <div class="company">성신프로세스</div>
-    <div class="sub">SSP ERP v5.5</div>
+    <div class="sub">SSP ERP v5.6</div>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-label">메인</div>
@@ -416,7 +416,7 @@ tr:hover td{background:#f7fafc;}
     <div class="form-group"><label>환차익(원) 자동</label><input type="text" id="o_fxGain" readonly style="font-weight:700"></div>
     <div class="form-group"><label>연동비용합계(원) 자동</label><input type="number" id="o_linkedcost" readonly style="color:var(--primary)"></div>
     <div class="form-group"><label>총원가(원) 자동</label><input type="number" id="o_totalcost" readonly></div>
-    <div class="form-group"><label>매출금액(원)</label><input type="number" id="o_salesKrw" oninput="calcOrderPreview()"></div>
+    <div class="form-group"><label>매출합계(원) 자동</label><input type="number" id="o_salesKrw" readonly style="background:#eef2ff;font-weight:700"></div>
     <div class="form-group"><label>마진(원) 자동</label><input type="number" id="o_margin" readonly></div>
     <div class="form-group"><label>마진율(%) 자동</label><input type="text" id="o_marginPct" readonly></div>
 
@@ -432,6 +432,12 @@ tr:hover td{background:#f7fafc;}
     <div class="form-group"><label>거래장부 자동연동</label>
       <select id="o_autoTx"><option value="Y">예 (저장 시 자동생성/갱신)</option><option value="N">아니오 (수동 입력)</option></select>
     </div>
+
+    <div class="form-section-title">📊 매출 명세 (고객 청구 항목별)</div>
+    <div class="form-group"><label>상품 매출(원)</label><input type="number" id="o_salesGoodsKrw" oninput="calcOrderPreview()" placeholder="본 상품 매출액"></div>
+    <div class="form-group"><label>물류비 청구(원)</label><input type="number" id="o_salesLogiKrw" oninput="calcOrderPreview()" placeholder="고객에게 청구한 물류비"></div>
+    <div class="form-group"><label>핸들링 수수료(원)</label><input type="number" id="o_salesHandlingKrw" oninput="calcOrderPreview()" placeholder="내 핸들링/서비스 수수료"></div>
+    <div class="form-group"><label>기타 청구(원)</label><input type="number" id="o_salesOtherKrw" oninput="calcOrderPreview()"></div>
 
     <div class="form-section-title">🚢 물류/운송 정보</div>
     <div class="form-group"><label>화물준비일(Cargo Ready)</label><input type="date" id="o_cargoready"></div>
@@ -808,13 +814,18 @@ function calcOrderPreview(){
   const totalFx=parseFloat(document.getElementById('o_totalFx').value)||0;
   const quotedRate=parseFloat(document.getElementById('o_quotedRate').value)||0;
   const actualRate=parseFloat(document.getElementById('o_actualRate').value)||quotedRate||0;
-  const sales=parseFloat(document.getElementById('o_salesKrw').value)||0;
+  const sG=parseFloat(document.getElementById('o_salesGoodsKrw').value)||0;
+  const sL=parseFloat(document.getElementById('o_salesLogiKrw').value)||0;
+  const sH=parseFloat(document.getElementById('o_salesHandlingKrw').value)||0;
+  const sO=parseFloat(document.getElementById('o_salesOtherKrw').value)||0;
+  const sales=sG+sL+sH+sO;
+  document.getElementById('o_salesKrw').value=sales||'';
   const unitFx=qty>0&&totalFx?(totalFx/qty):0;
   const costKrw=Math.round(totalFx*actualRate);
   const fxGain=quotedRate&&actualRate&&totalFx?Math.round((quotedRate-actualRate)*totalFx):0;
   const linkedCost=editingOrderId?getLinkedCost(editingOrderId):0;
   const total=costKrw+linkedCost;
-  const margin=sales-total+fxGain; // 환차익은 마진에 더함
+  const margin=sales-total+fxGain;
   document.getElementById('o_unitFx').value=unitFx?unitFx.toFixed(4):'';
   document.getElementById('o_costKrw').value=costKrw;
   document.getElementById('o_fxGain').value=fxGain?(fxGain>0?'+':'')+fxGain.toLocaleString()+'원':'';
@@ -1323,7 +1334,15 @@ function saveCostItem(){
   // 거래장부 자동생성
   if(document.getElementById('c_autoTx').value==='Y'){
     const accMap={'Ocean Freight':'포워더운임','BAF':'포워더운임','CAF':'포워더운임','THC':'포워더운임','D/O Fee':'포워더운임','관세사 수수료':'관세사비','관세':'관세','수입부가세':'수입부가세','내륙운송비':'내륙운송비','창고료':'창고료'};
-    const tx={id:nextId++,date:ci.date,type:'경비',account:accMap[name]||'지급수수료',counterparty:ci.vendor||'',orderId,project:o?o.item.substring(0,30):'',currency:ci.currency,fxamt:ci.unitprice&&ci.currency!=='KRW'?ci.unitprice*ci.qty:0,fxrate:ci.fxrate,amount:amtKrw,vattype:ci.vattype,vat:ci.vat,payment:'계좌이체',proof:ci.currency!=='KRW'?'Invoice':'세금계산서',collected:'Y',bizbr:100,note:ci.note||name};
+    // 카테고리에 따라 거래 타입 결정
+    let txType='경비';
+    let txAccount=accMap[name]||'지급수수료';
+    let txPayment='계좌이체';
+    let txProof=ci.currency!=='KRW'?'Invoice':'세금계산서';
+    if(ci.cat==='매출확정'){txType='매출';txAccount='상품';txProof='세금계산서';}
+    else if(ci.cat==='해외송금_선급'||ci.cat==='해외송금_잔금'){txType='해외송금';txAccount='외환매입';txPayment='해외송금(T/T)';txProof='해외영수증';}
+    else if(ci.cat==='부가세(수입)'){txType='매입';txAccount='수입부가세';}
+    const tx={id:nextId++,date:ci.date,type:txType,account:txAccount,counterparty:ci.vendor||'',orderId,project:o?o.item.substring(0,30):'',currency:ci.currency,fxamt:ci.unitprice&&ci.currency!=='KRW'?ci.unitprice*ci.qty:0,fxrate:ci.fxrate,amount:amtKrw,vattype:ci.vattype,vat:ci.vat,payment:txPayment,proof:txProof,collected:'Y',bizbr:100,note:ci.note||name};
     transactions.push(tx);save('transactions',transactions);save('nextId',nextId);
   }
   document.getElementById('costModal').classList.remove('open');
@@ -1340,7 +1359,7 @@ function openOrderModal(o=null){
   document.getElementById('orderModalTitle').textContent=o?'오더 수정':'수입오더 등록';
   document.getElementById('o_supplier').innerHTML=cpOptions();
   document.getElementById('o_buyer').innerHTML=cpOptions();
-  const flds={o_date:'date',o_item:'item',o_qty:'qty',o_salesKrw:'salesKrw',o_status:'status',o_note:'note',o_payterms:'payterms',o_cargoready:'cargoready',o_etd:'etd',o_eta:'eta',o_pol:'pol',o_pod:'pod',o_blno:'blno',o_carrier:'carrier',o_bookingno:'bookingno',o_forwarder:'forwarder',o_transporter:'transporter',o_customs:'customs',o_prepayDate:'prepayDate',o_prepayKrw:'prepayKrw',o_remitDate:'remitDate',o_remitFx:'remitFx',o_remitRate:'remitRate',o_remitFeeKrw:'remitFeeKrw',o_balanceDate:'balanceDate',o_balanceKrw:'balanceKrw'};
+  const flds={o_date:'date',o_item:'item',o_qty:'qty',o_status:'status',o_note:'note',o_payterms:'payterms',o_cargoready:'cargoready',o_etd:'etd',o_eta:'eta',o_pol:'pol',o_pod:'pod',o_blno:'blno',o_carrier:'carrier',o_bookingno:'bookingno',o_forwarder:'forwarder',o_transporter:'transporter',o_customs:'customs',o_prepayDate:'prepayDate',o_prepayKrw:'prepayKrw',o_remitDate:'remitDate',o_remitFx:'remitFx',o_remitRate:'remitRate',o_remitFeeKrw:'remitFeeKrw',o_balanceDate:'balanceDate',o_balanceKrw:'balanceKrw',o_salesGoodsKrw:'salesGoodsKrw',o_salesLogiKrw:'salesLogiKrw',o_salesHandlingKrw:'salesHandlingKrw',o_salesOtherKrw:'salesOtherKrw'};
   if(o){
     Object.entries(flds).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=o[key]||'';});
     // 신규 필드 + 구버전 호환 (totalFx 없으면 buyprice를 총액으로 처리; quotedRate/actualRate 없으면 fxrate 사용)
@@ -1352,6 +1371,10 @@ function openOrderModal(o=null){
     document.getElementById('o_supplier').value=o.supplier_name||'';
     document.getElementById('o_buyer').value=o.buyer_name||'';
     document.getElementById('o_autoTx').value=o.autoTx||'Y';
+    // 구버전 호환: 매출 분해 필드가 없고 salesKrw만 있으면 상품매출으로 옮김
+    if((o.salesGoodsKrw==null||o.salesGoodsKrw==='')&&(o.salesLogiKrw==null||o.salesLogiKrw==='')&&(o.salesHandlingKrw==null||o.salesHandlingKrw==='')&&(o.salesOtherKrw==null||o.salesOtherKrw==='')&&o.salesKrw){
+      document.getElementById('o_salesGoodsKrw').value=o.salesKrw;
+    }
     calcOrderPreview();
   }else{
     document.getElementById('o_date').value=todayStr();
@@ -1372,7 +1395,11 @@ function saveOrder(){
   const totalFx=parseFloat(document.getElementById('o_totalFx').value)||0;
   const quotedRate=parseFloat(document.getElementById('o_quotedRate').value)||0;
   const actualRate=parseFloat(document.getElementById('o_actualRate').value)||quotedRate||0;
-  const salesKrw=parseFloat(document.getElementById('o_salesKrw').value)||0;
+  const sG=parseFloat(document.getElementById('o_salesGoodsKrw').value)||0;
+  const sL=parseFloat(document.getElementById('o_salesLogiKrw').value)||0;
+  const sH=parseFloat(document.getElementById('o_salesHandlingKrw').value)||0;
+  const sO=parseFloat(document.getElementById('o_salesOtherKrw').value)||0;
+  const salesKrw=sG+sL+sH+sO;
   const costKrw=Math.round(totalFx*actualRate);
   const fxGain=quotedRate&&actualRate&&totalFx?Math.round((quotedRate-actualRate)*totalFx):0;
   const lc=editingOrderId?getLinkedCost(editingOrderId):0;
@@ -1388,6 +1415,7 @@ function saveOrder(){
     currency:document.getElementById('o_currency').value,
     fxrate:actualRate, // 구버전 호환용
     localcost:lc,importcost:0,salesKrw,
+    salesGoodsKrw:sG,salesLogiKrw:sL,salesHandlingKrw:sH,salesOtherKrw:sO,
     status:document.getElementById('o_status').value,
     note:document.getElementById('o_note').value,
     payterms:document.getElementById('o_payterms').value,
